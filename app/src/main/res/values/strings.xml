@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Detect WiFi Area</string>
+    <string name="title_activity_main_maps">MainMap</string>
+</resources>
