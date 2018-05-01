@@ -1,8 +1,18 @@
 package com.martynov.igor.detectwifiarea;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
@@ -11,6 +21,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -25,6 +36,14 @@ import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationClickListener;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.martynov.igor.detectwifiarea.Utils.waitTime;
 
 public class MainMapsActivity extends AppCompatActivity
         implements
@@ -53,6 +72,9 @@ public class MainMapsActivity extends AppCompatActivity
     private CharSequence mTitle;
     ActionBarDrawerToggle mDrawerToggle;
     private GoogleMap mMap;
+    LocationManager locationManager;
+    Context context = null;
+    Circle circle = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,7 +86,7 @@ public class MainMapsActivity extends AppCompatActivity
         mapFragment.getMapAsync(this);
 
         mTitle = getTitle();
-        mNavigationDrawerItemTitles= getResources().getStringArray(R.array.navigation_drawer_items_array);
+        mNavigationDrawerItemTitles = getResources().getStringArray(R.array.navigation_drawer_items_array);
         mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
         mDrawerList = (ListView) findViewById(R.id.left_drawer);
 
@@ -84,6 +106,107 @@ public class MainMapsActivity extends AppCompatActivity
         mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
         mDrawerLayout.addDrawerListener(mDrawerToggle);
         setupDrawerToggle();
+
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+        initContext();
+
+        if (ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+
+        mainLogic();
+    }
+
+    private void drawCircle(android.location.Location location) {
+        if(circle != null) {
+            circle.remove();
+        }
+        circle = mMap.addCircle(new CircleOptions()
+                .center(new LatLng(location.getLatitude(), location.getLongitude()))
+                .radius(100)
+                .strokeColor(Color.RED)
+                .fillColor(0x220000FF)
+                .strokeWidth(5));
+    }
+
+    LocationListener locationListenerGPS = new LocationListener() {
+
+        @Override
+        public void onLocationChanged(android.location.Location location) {
+            double latitude = location.getLatitude();
+            double longitude = location.getLongitude();
+            String msg = "New Latitude: " + latitude + "\nNew Longitude: " + longitude;
+            //drawCircle(location);
+            scanWifiNetworks(context);
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+
+        }
+    };
+
+    private void isLocationEnabled() {
+        if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
+            alertDialog.setTitle("Enable Location");
+            alertDialog.setMessage("Your locations setting is not enabled. Please enabled it in settings menu.");
+            alertDialog.setPositiveButton("Location Settings", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which){
+                    Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    startActivity(intent);
+                }
+            });
+            alertDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener(){
+                public void onClick(DialogInterface dialog, int which){
+                    dialog.cancel();
+                }
+            });
+            AlertDialog alert = alertDialog.create();
+            alert.show();
+        }
+        else {
+            AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
+            alertDialog.setTitle("Confirm Location");
+            alertDialog.setMessage("Your Location is enabled, please enjoy");
+            alertDialog.setNegativeButton("Back to interface", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.cancel();
+                }
+            });
+            AlertDialog alert = alertDialog.create();
+            alert.show();
+        }
+    }
+
+    public void scanWifiNetworks(Context context) {
+        final WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        if(wifiManager != null && wifiManager.startScan()) {
+            List<ScanResult> scanResultList = wifiManager.getScanResults();
+            List<String> SSIDList = scanResultList.stream().map(result -> result.SSID).collect(Collectors.toList());
+            Toast.makeText(context, SSIDList.toString(), Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
@@ -134,10 +257,18 @@ public class MainMapsActivity extends AppCompatActivity
                 Manifest.permission.ACCESS_FINE_LOCATION)) {
             // Enable the my location layer if the permission has been granted.
             enableMyLocation();
+            mainLogic();
         } else {
             // Display the missing permission error dialog when the fragments resume.
             mPermissionDenied = true;
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void mainLogic() {
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000,
+                0, locationListenerGPS);
+        isLocationEnabled();
     }
 
     @Override
@@ -232,5 +363,11 @@ public class MainMapsActivity extends AppCompatActivity
         mDrawerToggle = new ActionBarDrawerToggle(this,mDrawerLayout,toolbar,R.string.app_name, R.string.app_name);
         //This is necessary to change the icon of the Drawer Toggle upon state change.
         mDrawerToggle.syncState();
+    }
+
+    private void initContext() {
+        if(context == null) {
+            context = this;
+        }
     }
 }
