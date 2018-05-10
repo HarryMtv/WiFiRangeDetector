@@ -29,26 +29,38 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationClickListener;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
+import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.martynov.igor.detectwifiarea.Utils.waitTime;
+import static com.martynov.igor.detectwifiarea.PointsStorage.generateWifiPoint;
+import static com.martynov.igor.detectwifiarea.PointsStorage.getPointsStorage;
 
 public class MainMapsActivity extends AppCompatActivity
         implements
         OnMyLocationButtonClickListener,
         OnMyLocationClickListener,
+        GoogleMap.OnMarkerClickListener,
         OnMapReadyCallback,
         ActivityCompat.OnRequestPermissionsResultCallback {
 
@@ -58,6 +70,8 @@ public class MainMapsActivity extends AppCompatActivity
      * @see #onRequestPermissionsResult(int, String[], int[])
      */
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
+
+    private static final String TAG = "MainMapsActivity";
 
     /**
      * Flag indicating whether a requested permission has been denied after returning in
@@ -71,10 +85,15 @@ public class MainMapsActivity extends AppCompatActivity
     Toolbar toolbar;
     private CharSequence mTitle;
     ActionBarDrawerToggle mDrawerToggle;
-    private GoogleMap mMap;
+    private GoogleMap googleMap;
     LocationManager locationManager;
     Context context = null;
     Circle circle = null;
+
+    private LatLng myLocation;
+    private Marker myLocationMarker;
+    private List<LatLng> points; //added
+    Polyline line; //added
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +108,7 @@ public class MainMapsActivity extends AppCompatActivity
         mNavigationDrawerItemTitles = getResources().getStringArray(R.array.navigation_drawer_items_array);
         mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
         mDrawerList = (ListView) findViewById(R.id.left_drawer);
+        points = new ArrayList<>(); //added
 
         setupToolbar();
 
@@ -124,19 +144,68 @@ public class MainMapsActivity extends AppCompatActivity
             return;
         }
 
-        mainLogic();
+        locationProvider();
     }
 
     private void drawCircle(android.location.Location location) {
         if(circle != null) {
             circle.remove();
         }
-        circle = mMap.addCircle(new CircleOptions()
+        circle = googleMap.addCircle(new CircleOptions()
                 .center(new LatLng(location.getLatitude(), location.getLongitude()))
                 .radius(100)
                 .strokeColor(Color.RED)
                 .fillColor(0x220000FF)
                 .strokeWidth(5));
+    }
+
+    private void redrawLine() {
+        googleMap.clear();  //clears all Markers and Polylines
+
+        PolylineOptions options = new PolylineOptions().width(5).color(Color.BLUE).geodesic(true);
+        for (int i = 0; i < points.size(); i++) {
+            LatLng point = points.get(i);
+            options.add(point);
+        }
+        //addMarker(); //add Marker in current position
+        line = googleMap.addPolyline(options); //add Polyline
+    }
+
+    private void addMarker() {
+        MarkerOptions options = new MarkerOptions();
+
+        // following four lines requires 'Google Maps Android API Utility Library'
+        // https://developers.google.com/maps/documentation/android/utility/
+        // I have used this to display the time as title for location markers
+        // you can safely comment the following four lines but for this info
+        //IconGenerator iconFactory = new IconGenerator(this);
+        //iconFactory.setStyle(IconGenerator.STYLE_PURPLE);
+        // options.icon(BitmapDescriptorFactory.fromBitmap(iconFactory.makeIcon(mLastUpdateTime + requiredArea + city)));
+        //options.icon(BitmapDescriptorFactory.fromBitmap(iconFactory.makeIcon(requiredArea + ", " + city)));
+        //options.anchor(iconFactory.getAnchorU(), iconFactory.getAnchorV());
+
+        //LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        //options.position(currentLatLng);
+        Marker mapMarker = googleMap.addMarker(options);
+        //long atTime = mCurrentLocation.getTime();
+        //mLastUpdateTime = DateFormat.getTimeInstance().format(new Date(atTime));
+        //String title = mLastUpdateTime.concat(", " + requiredArea).concat(", " + city).concat(", " + country);
+        mapMarker.setTitle("Hello");
+
+        //TextView mapTitle = (TextView) findViewById(R.id.textViewTitle);
+        //mapTitle.setText("Hello");
+
+        Log.d(TAG, "Marker added.............................");
+        //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
+        Log.d(TAG, "Zoom done.............................");
+    }
+
+    private void addMyPosition(final LatLng myLocation) {
+        this.myLocation = myLocation;
+        /*myLocationMarker = googleMap
+                .addMarker(new MarkerOptions()
+                        .position(myLocation)
+                        .title("My Position"));*/
     }
 
     LocationListener locationListenerGPS = new LocationListener() {
@@ -145,10 +214,18 @@ public class MainMapsActivity extends AppCompatActivity
         public void onLocationChanged(android.location.Location location) {
             double latitude = location.getLatitude();
             double longitude = location.getLongitude();
-            String msg = "New Latitude: " + latitude + "\nNew Longitude: " + longitude;
+
+            /*String msg = "New Latitude: " + latitude + "\nNew Longitude: " + longitude;
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show();*/
+
+            LatLng latLng = new LatLng(latitude, longitude); //you already have this
+            points.add(latLng); //added
+
+            //redrawLine(); // draw radius
+            addMyPosition(latLng); // add my location
+
             //drawCircle(location);
             scanWifiNetworks(context);
-            Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
         }
 
         @Override
@@ -166,6 +243,28 @@ public class MainMapsActivity extends AppCompatActivity
 
         }
     };
+
+    public void scanWifiNetworks(Context context) {
+        final WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        if(wifiManager != null && wifiManager.startScan()) {
+            List<ScanResult> scanResultList = wifiManager.getScanResults();
+            //List<String> SSIDList = scanResultList.stream().map(result -> result.SSID).collect(Collectors.toList());
+            //Toast.makeText(context, SSIDList.toString(), Toast.LENGTH_LONG).show();
+
+            scanResultList.forEach(result -> getPointsStorage()
+                    .addPoint(result.SSID, generateWifiPoint(getMyLocation(), result.level)));
+
+            final String[] tmpTitle = {""};
+            getPointsStorage().getWifiPointsStorage().forEach((k, v) -> {
+                tmpTitle[0] = tmpTitle[0] + k + " : " + v.get(v.size() - 1).toString() + "\n";
+            });
+
+            googleMap
+                    .addMarker(new MarkerOptions()
+                            .position(getMyLocation())
+                            .title(tmpTitle[0]));
+        }
+    }
 
     private void isLocationEnabled() {
         if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
@@ -200,21 +299,13 @@ public class MainMapsActivity extends AppCompatActivity
         }
     }
 
-    public void scanWifiNetworks(Context context) {
-        final WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-        if(wifiManager != null && wifiManager.startScan()) {
-            List<ScanResult> scanResultList = wifiManager.getScanResults();
-            List<String> SSIDList = scanResultList.stream().map(result -> result.SSID).collect(Collectors.toList());
-            Toast.makeText(context, SSIDList.toString(), Toast.LENGTH_LONG).show();
-        }
-    }
-
     @Override
     public void onMapReady(GoogleMap map) {
-        mMap = map;
+        googleMap = map;
 
-        mMap.setOnMyLocationButtonClickListener(this);
-        mMap.setOnMyLocationClickListener(this);
+        googleMap.setOnMyLocationButtonClickListener(this);
+        googleMap.setOnMyLocationClickListener(this);
+        googleMap.setOnMarkerClickListener(this);
         enableMyLocation();
     }
 
@@ -227,9 +318,9 @@ public class MainMapsActivity extends AppCompatActivity
             // Permission to access the location is missing.
             PermissionUtils.requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
                     Manifest.permission.ACCESS_FINE_LOCATION, true);
-        } else if (mMap != null) {
+        } else if (googleMap != null) {
             // Access to the location has been granted to the app.
-            mMap.setMyLocationEnabled(true);
+            googleMap.setMyLocationEnabled(false);
         }
     }
 
@@ -257,7 +348,7 @@ public class MainMapsActivity extends AppCompatActivity
                 Manifest.permission.ACCESS_FINE_LOCATION)) {
             // Enable the my location layer if the permission has been granted.
             enableMyLocation();
-            mainLogic();
+            locationProvider();
         } else {
             // Display the missing permission error dialog when the fragments resume.
             mPermissionDenied = true;
@@ -265,9 +356,11 @@ public class MainMapsActivity extends AppCompatActivity
     }
 
     @SuppressLint("MissingPermission")
-    private void mainLogic() {
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000,
-                0, locationListenerGPS);
+    private void locationProvider() {
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 100,
+                1, locationListenerGPS);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 100,
+                1, locationListenerGPS);
         isLocationEnabled();
     }
 
@@ -287,6 +380,26 @@ public class MainMapsActivity extends AppCompatActivity
     private void showMissingPermissionError() {
         PermissionUtils.PermissionDeniedDialog
                 .newInstance(true).show(getSupportFragmentManager(), "dialog");
+    }
+
+    @Override
+    public boolean onMarkerClick(Marker marker) {
+        if(marker.equals(myLocationMarker)) {
+            googleMap
+                    .moveCamera(CameraUpdateFactory.newLatLngZoom(getMyLocation(),15));
+            // Zoom in, animating the camera.
+            googleMap
+                    .animateCamera(CameraUpdateFactory.zoomIn());
+            // Zoom out to zoom level 10, animating with a duration of 2 seconds.
+            googleMap
+                    .animateCamera(CameraUpdateFactory.zoomTo(18), 3000, null);
+            marker
+                    .showInfoWindow();
+            return true;
+        }
+
+        Toast.makeText(this, marker.getTitle(), Toast.LENGTH_LONG).show();
+        return false;
     }
 
     //Left panel
@@ -369,5 +482,9 @@ public class MainMapsActivity extends AppCompatActivity
         if(context == null) {
             context = this;
         }
+    }
+
+    private LatLng getMyLocation() {
+        return myLocation != null ? myLocation : new LatLng(1, 1);
     }
 }
