@@ -11,6 +11,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.wifi.ScanResult;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -29,7 +30,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -44,17 +44,18 @@ import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polygon;
+import com.google.android.gms.maps.model.PolygonOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
-import java.text.DateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.martynov.igor.detectwifiarea.PointsStorage.generateWifiPoint;
 import static com.martynov.igor.detectwifiarea.PointsStorage.getPointsStorage;
+import static com.martynov.igor.detectwifiarea.Utils.findMassCenter;
 
 public class MainMapsActivity extends AppCompatActivity
         implements
@@ -92,6 +93,9 @@ public class MainMapsActivity extends AppCompatActivity
 
     private LatLng myLocation;
     private Marker myLocationMarker;
+    private LatLng currentWiFiPoint;
+    private Marker currentWiFiMarker;
+    private Polygon currentWiFiPolygon;
     private List<LatLng> points; //added
     Polyline line; //added
 
@@ -147,13 +151,34 @@ public class MainMapsActivity extends AppCompatActivity
         locationProvider();
     }
 
-    private void drawCircle(android.location.Location location) {
-        if(circle != null) {
-            circle.remove();
-        }
+    private void drawCircle() {
+        WifiInfo wifiInfo = getCurrentConnectionInfo(context);
+        List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
+                .get(wifiInfo.getSSID().replace("\"", ""));
+
+        /*double sumX = currentWiFiPoints.stream().mapToDouble(WiFiPoint::getX).sum();
+        double sumY = currentWiFiPoints.stream().mapToDouble(WiFiPoint::getY).sum();
+        double sumXsumX = currentWiFiPoints.stream().mapToDouble(point -> point.getX() * point.getX()).sum();
+        double sumYsumY = currentWiFiPoints.stream().mapToDouble(point -> point.getY() * point.getY()).sum();
+
+        double delta = ((sumXsumX + sumYsumY) -
+                2 * (currentWiFiPoint.latitude * sumX + currentWiFiPoint.longitude * sumY))
+                / currentWiFiPoints.size();
+
+        double radius = Math.sqrt(
+                (currentWiFiPoint.latitude) * (currentWiFiPoint.latitude) +
+                        (currentWiFiPoint.longitude) * (currentWiFiPoint.longitude) + delta
+        );*/
+
+        double sum = currentWiFiPoints.stream().mapToDouble(point ->
+                Math.sqrt((point.getX() - currentWiFiPoint.latitude) * (point.getX() - currentWiFiPoint.latitude)
+                        + (point.getY() - currentWiFiPoint.longitude) * (point.getY() - currentWiFiPoint.longitude))).sum();
+        double tradius = sum / currentWiFiPoints.size();
+
+        if(circle != null) circle.remove();
         circle = googleMap.addCircle(new CircleOptions()
-                .center(new LatLng(location.getLatitude(), location.getLongitude()))
-                .radius(100)
+                .center(currentWiFiPoint)
+                .radius(tradius * 1000000)
                 .strokeColor(Color.RED)
                 .fillColor(0x220000FF)
                 .strokeWidth(5));
@@ -201,11 +226,42 @@ public class MainMapsActivity extends AppCompatActivity
     }
 
     private void addMyPosition(final LatLng myLocation) {
+        if(myLocationMarker!= null) myLocationMarker.remove();
         this.myLocation = myLocation;
-        /*myLocationMarker = googleMap
+        myLocationMarker = googleMap
                 .addMarker(new MarkerOptions()
                         .position(myLocation)
-                        .title("My Position"));*/
+                        .title("My Position")
+                        .icon(BitmapDescriptorFactory
+                                .defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
+    }
+
+    private void drawPolygon() {
+        WifiInfo wifiInfo = getCurrentConnectionInfo(context);
+        List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
+                .get(wifiInfo.getSSID().replace("\"", ""));
+
+        LatLng[] currentWiFiCoordinates = currentWiFiPoints.stream().map(WiFiPoint::getPoint)
+                .toArray(LatLng[]::new);
+
+        double sumX = currentWiFiPoints.stream().mapToDouble(point -> point.getXMass() * point.getXMass()).sum();
+        double sumY = currentWiFiPoints.stream().mapToDouble(point -> point.getYMass() * point.getYMass()).sum();
+
+        double delta = ((sumX + sumY) -
+                2 * (currentWiFiPoint.latitude * sumX + currentWiFiPoint.longitude * sumY))
+                / currentWiFiPoints.size();
+
+        double radius = Math.sqrt(
+                        (currentWiFiPoint.latitude)*(currentWiFiPoint.latitude) +
+                        (currentWiFiPoint.longitude)*(currentWiFiPoint.longitude) + delta
+        );
+
+        if(currentWiFiPolygon != null) currentWiFiPolygon.remove();
+        currentWiFiPolygon = googleMap.addPolygon(new PolygonOptions()
+                //.clickable(true)
+                .add(currentWiFiCoordinates)
+                .fillColor(0xff388E3C));
+        currentWiFiPolygon.setTag("curwifi");
     }
 
     LocationListener locationListenerGPS = new LocationListener() {
@@ -223,9 +279,11 @@ public class MainMapsActivity extends AppCompatActivity
 
             //redrawLine(); // draw radius
             addMyPosition(latLng); // add my location
-
             //drawCircle(location);
             scanWifiNetworks(context);
+            addCurrentWifiMarker();
+            //drawPolygon();
+            drawCircle();
         }
 
         @Override
@@ -244,6 +302,30 @@ public class MainMapsActivity extends AppCompatActivity
         }
     };
 
+    private void addCurrentWifiMarker() {
+        WifiInfo wifiInfo = getCurrentConnectionInfo(context);
+        List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
+                .get(wifiInfo.getSSID().replace("\"", ""));
+
+        if(currentWiFiPoints != null) {
+            //String tmp = wifiInfo.getSSID() + " : " + wifiInfo.getRssi() + " : " + wifiInfo.getFrequency();
+            if(currentWiFiMarker!= null) currentWiFiMarker.remove();
+            currentWiFiPoint = findMassCenter(currentWiFiPoints);
+            currentWiFiMarker = googleMap
+                    .addMarker(new MarkerOptions()
+                            .position(currentWiFiPoint)
+                            .title(wifiInfo.getSSID()));
+        }
+    }
+
+    public static WifiInfo getCurrentConnectionInfo(Context context) {
+        final WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        if(wifiManager != null) {
+            return wifiManager.getConnectionInfo();
+        }
+        return null;
+    }
+
     public void scanWifiNetworks(Context context) {
         final WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if(wifiManager != null && wifiManager.startScan()) {
@@ -253,16 +335,6 @@ public class MainMapsActivity extends AppCompatActivity
 
             scanResultList.forEach(result -> getPointsStorage()
                     .addPoint(result.SSID, generateWifiPoint(getMyLocation(), result.level)));
-
-            final String[] tmpTitle = {""};
-            getPointsStorage().getWifiPointsStorage().forEach((k, v) -> {
-                tmpTitle[0] = tmpTitle[0] + k + " : " + v.get(v.size() - 1).toString() + "\n";
-            });
-
-            googleMap
-                    .addMarker(new MarkerOptions()
-                            .position(getMyLocation())
-                            .title(tmpTitle[0]));
         }
     }
 
@@ -398,7 +470,12 @@ public class MainMapsActivity extends AppCompatActivity
             return true;
         }
 
-        Toast.makeText(this, marker.getTitle(), Toast.LENGTH_LONG).show();
+        if(marker.equals(currentWiFiMarker)) {
+            marker
+                    .showInfoWindow();
+        }
+
+        //Toast.makeText(this, marker.getTitle(), Toast.LENGTH_LONG).show();
         return false;
     }
 

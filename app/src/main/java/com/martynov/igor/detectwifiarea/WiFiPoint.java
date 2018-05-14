@@ -20,4 +20,28 @@ public class WiFiPoint {
     public String toString() {
         return String.valueOf(signalStrange);
     }
+
+    public int getSignalStrange() {
+        return this.signalStrange;
+    }
+
+    public double getXMass() {
+        return this.point.latitude * this.signalStrange;
+    }
+
+    public double getYMass() {
+        return this.point.longitude * this.signalStrange;
+    }
+
+    public LatLng getPoint() {
+        return this.point;
+    }
+
+    public double getX() {
+        return getPoint().latitude;
+    }
+
+    public double getY() {
+        return getPoint().longitude;
+    }
 }
