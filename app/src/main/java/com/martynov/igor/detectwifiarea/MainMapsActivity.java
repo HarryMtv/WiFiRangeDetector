@@ -53,9 +53,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.martynov.igor.detectwifiarea.Main.convexHull;
 import static com.martynov.igor.detectwifiarea.PointsStorage.generateWifiPoint;
 import static com.martynov.igor.detectwifiarea.PointsStorage.getPointsStorage;
 import static com.martynov.igor.detectwifiarea.Utils.findMassCenter;
+import static java.util.stream.Collectors.toList;
 
 public class MainMapsActivity extends AppCompatActivity
         implements
@@ -178,7 +180,7 @@ public class MainMapsActivity extends AppCompatActivity
         if(circle != null) circle.remove();
         circle = googleMap.addCircle(new CircleOptions()
                 .center(currentWiFiPoint)
-                .radius(tradius * 1000000)
+                .radius(tradius * 1_000_000)
                 .strokeColor(Color.RED)
                 .fillColor(0x220000FF)
                 .strokeWidth(5));
@@ -241,7 +243,7 @@ public class MainMapsActivity extends AppCompatActivity
         List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
                 .get(wifiInfo.getSSID().replace("\"", ""));
 
-        LatLng[] currentWiFiCoordinates = currentWiFiPoints.stream().map(WiFiPoint::getPoint)
+        /*LatLng[] currentWiFiCoordinates = currentWiFiPoints.stream().map(WiFiPoint::getPoint)
                 .toArray(LatLng[]::new);
 
         double sumX = currentWiFiPoints.stream().mapToDouble(point -> point.getXMass() * point.getXMass()).sum();
@@ -254,7 +256,10 @@ public class MainMapsActivity extends AppCompatActivity
         double radius = Math.sqrt(
                         (currentWiFiPoint.latitude)*(currentWiFiPoint.latitude) +
                         (currentWiFiPoint.longitude)*(currentWiFiPoint.longitude) + delta
-        );
+        );*/
+
+        LatLng[] currentWiFiCoordinates = convexHull(currentWiFiPoints).stream().map(WiFiPoint::getPoint)
+                .toArray(LatLng[]::new);
 
         if(currentWiFiPolygon != null) currentWiFiPolygon.remove();
         currentWiFiPolygon = googleMap.addPolygon(new PolygonOptions()
@@ -282,8 +287,8 @@ public class MainMapsActivity extends AppCompatActivity
             //drawCircle(location);
             scanWifiNetworks(context);
             addCurrentWifiMarker();
-            //drawPolygon();
             drawCircle();
+            drawPolygon();
         }
 
         @Override
