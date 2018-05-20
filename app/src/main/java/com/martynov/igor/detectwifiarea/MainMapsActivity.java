@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.martynov.igor.detectwifiarea.GrahamScan.getConvexHull;
 import static com.martynov.igor.detectwifiarea.Main.convexHull;
 import static com.martynov.igor.detectwifiarea.PointsStorage.generateWifiPoint;
 import static com.martynov.igor.detectwifiarea.PointsStorage.getPointsStorage;
@@ -153,7 +154,7 @@ public class MainMapsActivity extends AppCompatActivity
         locationProvider();
     }
 
-    private void drawCircle() {
+    private void drawRadius() {
         WifiInfo wifiInfo = getCurrentConnectionInfo(context);
         List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
                 .get(wifiInfo.getSSID().replace("\"", ""));
@@ -175,12 +176,12 @@ public class MainMapsActivity extends AppCompatActivity
         double sum = currentWiFiPoints.stream().mapToDouble(point ->
                 Math.sqrt((point.getX() - currentWiFiPoint.latitude) * (point.getX() - currentWiFiPoint.latitude)
                         + (point.getY() - currentWiFiPoint.longitude) * (point.getY() - currentWiFiPoint.longitude))).sum();
-        double tradius = sum / currentWiFiPoints.size();
+        double radius = sum / currentWiFiPoints.size();
 
         if(circle != null) circle.remove();
         circle = googleMap.addCircle(new CircleOptions()
                 .center(currentWiFiPoint)
-                .radius(tradius * 1_000_000)
+                .radius(50)
                 .strokeColor(Color.RED)
                 .fillColor(0x220000FF)
                 .strokeWidth(5));
@@ -238,7 +239,7 @@ public class MainMapsActivity extends AppCompatActivity
                                 .defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
     }
 
-    private void drawPolygon() {
+    private void drawWiFiRangePolygon() {
         WifiInfo wifiInfo = getCurrentConnectionInfo(context);
         List<WiFiPoint> currentWiFiPoints = getPointsStorage().getWifiPointsStorage()
                 .get(wifiInfo.getSSID().replace("\"", ""));
@@ -258,8 +259,10 @@ public class MainMapsActivity extends AppCompatActivity
                         (currentWiFiPoint.longitude)*(currentWiFiPoint.longitude) + delta
         );*/
 
-        LatLng[] currentWiFiCoordinates = convexHull(currentWiFiPoints).stream().map(WiFiPoint::getPoint)
+        LatLng[] currentWiFiCoordinates = getConvexHull(currentWiFiPoints).stream().map(WiFiPoint::getPoint)
                 .toArray(LatLng[]::new);
+        System.out.println(currentWiFiPoints.toArray().length);
+        System.out.println(currentWiFiCoordinates.length + "///");
 
         if(currentWiFiPolygon != null) currentWiFiPolygon.remove();
         currentWiFiPolygon = googleMap.addPolygon(new PolygonOptions()
@@ -287,8 +290,8 @@ public class MainMapsActivity extends AppCompatActivity
             //drawCircle(location);
             scanWifiNetworks(context);
             addCurrentWifiMarker();
-            drawCircle();
-            drawPolygon();
+            drawRadius();
+            drawWiFiRangePolygon();
         }
 
         @Override

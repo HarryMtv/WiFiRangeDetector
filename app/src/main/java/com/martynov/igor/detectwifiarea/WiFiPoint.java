@@ -11,6 +11,11 @@ public class WiFiPoint {
     private LatLng point;
     private int signalStrange;
 
+    public WiFiPoint(double x, double y) {
+        this.point = new LatLng(x, y);
+        this.signalStrange = 0;
+    }
+
     public WiFiPoint(final LatLng point, final int signalStrange) {
         this.point = point;
         this.signalStrange = signalStrange;

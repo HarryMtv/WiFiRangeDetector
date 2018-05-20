@@ -6,6 +6,8 @@ package com.martynov.igor.detectwifiarea;
 
 import com.google.android.gms.maps.model.LatLng;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Utils {
